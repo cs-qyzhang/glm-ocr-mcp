@@ -5,7 +5,7 @@ description = "MCP server for GLM OCR to extract text from images and PDFs"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=1.2.0",
+    "mcp>=1.26.0",
     "httpx>=0.28.0",
     "python-dotenv>=1.1.0",
 ]
