@@ -2,69 +2,76 @@
 
 MCP server for extracting text from images and PDFs using ZhipuAI GLM-OCR.
 
-## Installation
-
-### Install from source (recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/glm-ocr-mcp.git
-cd glm-ocr-mcp
-uvx --from . glm-ocr-mcp
-```
-
-### Run directly
-
-```bash
-# Run with uvx (requires setting environment variable)
-ZHIPU_API_KEY=your_api_key uvx --from glm-ocr-mcp glm-ocr-mcp
-```
-
-## Configuration
-
-Set the environment variable:
-```bash
-export ZHIPU_API_KEY=your_api_key_here
-```
-
 ## Usage
-
-### Using with Claude Code
-
-Add to `~/.claude/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "glm-ocr": {
       "command": "uvx",
-      "args": ["--from", "glm-ocr-mcp", "glm-ocr-mcp"],
+      "args": ["glm-ocr-mcp"],
       "env": {
-        "ZHIPU_API_KEY": "your_api_key_here"
+        "ZHIPU_API_KEY": "your_api_key_here",
+        "ZHIPU_OCR_API_URL": "https://open.bigmodel.cn/api/paas/v4/layout_parsing"
       }
     }
   }
 }
 ```
 
+### Using with Claude Code
+
+```bash
+claude mcp add --scope user glm-ocr \
+  --env ZHIPU_API_KEY=your_api_key_here \
+  --env ZHIPU_OCR_API_URL=https://open.bigmodel.cn/api/paas/v4/layout_parsing \
+  -- uvx glm-ocr-mcp
+```
+
+### Using with Codex
+
+Add MCP server with command:
+
+```bash
+codex mcp add glm-ocr \
+  --env ZHIPU_API_KEY=your_api_key_here \
+  --env ZHIPU_OCR_API_URL=https://open.bigmodel.cn/api/paas/v4/layout_parsing \
+  -- uvx glm-ocr-mcp
+```
+
 ### Tools
 
-The server provides `extract_text` tool:
+The server provides one tool:
 
-- **file_path**: Path to image or PDF file (absolute or relative to working directory)
-- **base64_data**: Base64 encoded file data (optional, either file_path or base64_data required)
+- **extract_text**: Extract from local file or URL (`png`, `jpg/jpeg`, `pdf`)
+  - default returns Markdown text
+  - set `return_json=true` to return structured JSON without `md_results` (contains page parsing details like `bbox_2d`, `content`, `label`, etc.)
+
+Parameters:
+
+- **file_path**: Local file path or URL for `png`, `jpg/jpeg`, or `pdf`
+- **base64_data**: Optional data URL/base64 payload (use when `file_path` is unavailable)
+- **start_page_id**: Optional PDF start page (1-based, only effective for PDF)
+- **end_page_id**: Optional PDF end page (1-based, only effective for PDF)
+- **return_json**: Optional boolean, default `false`. `true` returns JSON; `false` returns Markdown.
 
 ### Examples
 
 ```python
-# Extract text from image
+# Extract text from local image
 extract_text(file_path="./screenshot.png")
 
-# Extract text from PDF
+# Extract text from local PDF
 extract_text(file_path="./document.pdf")
 
-# Use base64 data
+# Extract text from URL image
+extract_text(file_path="https://example.com/test.jpg")
+
+# Use base64/data URL
 extract_text(base64_data="data:image/png;base64,iVBORw0KGgo...")
+
+# Extract structured layout JSON
+extract_text(file_path="https://example.com/test.png", return_json=True)
 ```
 
 ## Development
@@ -74,11 +81,16 @@ extract_text(base64_data="data:image/png;base64,iVBORw0KGgo...")
 uv venv
 source .venv/bin/activate
 
-# Install dependencies
-uv pip install -e .
+# Sync dependencies and install current project
+uv sync
 
 # Run server for testing
 python -m glm_ocr_mcp.server
+```
+
+Windows PowerShell activation:
+```powershell
+.venv\Scripts\Activate.ps1
 ```
 
 ## Project Structure

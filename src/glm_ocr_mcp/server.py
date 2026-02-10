@@ -1,6 +1,7 @@
 """GLM OCR MCP Server - Model Context Protocol server for OCR text extraction."""
 
 import asyncio
+import json
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 
@@ -13,26 +14,45 @@ def create_server() -> Server:
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
+        shared_schema = {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Local file path or URL for PNG, JPG/JPEG, or PDF. Examples: ./test.png, C:/docs/a.pdf, https://example.com/a.jpg"
+                },
+                "base64_data": {
+                    "type": "string",
+                    "description": "Optional data URL or base64 payload. Use when file_path is unavailable."
+                },
+                "start_page_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional PDF start page (1-based). Ignored for PNG/JPG inputs."
+                },
+                "end_page_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional PDF end page (1-based). Ignored for PNG/JPG inputs."
+                },
+                "return_json": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Optional, default false. Use only when structured layout details are needed (bbox_2d/content/label etc.), because JSON output is much longer."
+                }
+            },
+            "anyOf": [
+                {"required": ["file_path"]},
+                {"required": ["base64_data"]},
+            ],
+            "additionalProperties": False,
+        }
         return [
             Tool(
                 name="extract_text",
-                description="Extract text content from images or PDF files, return Markdown format. Supports JPEG, PNG, PDF and other formats. Accepts file path or base64 encoded data.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "Path to image or PDF file (e.g., /path/to/image.png or ./document.pdf)"
-                        },
-                        "base64_data": {
-                            "type": "string",
-                            "description": "Base64 encoded file data (optional, either file_path or base64_data required)"
-                        }
-                    },
-                    "oneOf": ["file_path", "base64_data"],
-                    "required": ["file_path"]
-                }
-            )
+                description="Extract text from local files or URLs. Supported formats: PNG, JPG/JPEG, PDF.",
+                inputSchema=shared_schema
+            ),
         ]
 
     @server.call_tool()
@@ -40,8 +60,24 @@ def create_server() -> Server:
         if name != "extract_text":
             raise ValueError(f"Unknown tool: {name}")
 
+        arguments = arguments or {}
         file_path = arguments.get("file_path")
         base64_data = arguments.get("base64_data")
+        start_page_id = arguments.get("start_page_id")
+        end_page_id = arguments.get("end_page_id")
+        return_json = bool(arguments.get("return_json", False))
+
+        if (
+            start_page_id is not None
+            and end_page_id is not None
+            and start_page_id > end_page_id
+        ):
+            return [
+                TextContent(
+                    type="text",
+                    text="Error: start_page_id must be less than or equal to end_page_id",
+                )
+            ]
 
         # Get OCR client
         ocr = get_ocr_client()
@@ -51,12 +87,31 @@ def create_server() -> Server:
                 # Handle base64 data
                 if "," in base64_data:
                     # May be data URL format
-                    base64_data = base64_data.split(",", 1)[1]
-                md_content = ocr.parse(base64_data.encode("utf-8"))
+                    data_input = base64_data
+                else:
+                    data_input = f"data:application/octet-stream;base64,{base64_data}"
             else:
                 # Handle file path
-                md_content = ocr.parse(file_path)
+                data_input = file_path
 
+            if return_json:
+                json_result = ocr.parse_json(
+                    data_input,
+                    start_page_id=start_page_id,
+                    end_page_id=end_page_id,
+                )
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(json_result, ensure_ascii=False),
+                    )
+                ]
+
+            md_content = ocr.parse(
+                data_input,
+                start_page_id=start_page_id,
+                end_page_id=end_page_id,
+            )
             return [TextContent(type="text", text=md_content)]
         except FileNotFoundError:
             return [TextContent(type="text", text=f"Error: File not found: {file_path}")]
