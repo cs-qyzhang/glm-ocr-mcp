@@ -1,6 +1,6 @@
 """GLM OCR MCP Server - Model Context Protocol server for OCR text extraction."""
 
-import os
+import asyncio
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 
@@ -68,14 +68,23 @@ def create_server() -> Server:
     return server
 
 
-# Convenience function for running the server with stdio transport
-def run():
-    """Run the MCP server using stdio transport."""
+async def run_async():
+    """Run the MCP server using stdio transport asynchronously."""
     from mcp.server.stdio import stdio_server
 
     server = create_server()
-    with stdio_server() as (read_stream, write_stream):
-        server.run(read_stream, write_stream, server.create_initialization_options())
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            server.create_initialization_options()
+        )
+
+
+# Convenience function for running the server with stdio transport
+def run():
+    """Run the MCP server using stdio transport."""
+    asyncio.run(run_async())
 
 
 if __name__ == "__main__":
